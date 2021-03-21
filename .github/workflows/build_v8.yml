@@ -1,0 +1,151 @@
+name: Build V8 Static Library
+
+on: [ push, pull_request ]
+
+jobs:
+  publish_headers:
+    name: publish header files
+    if: >-
+      startsWith(github.event.head_commit.message, '[Release]') &&
+      github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v1
+      
+      - name: Get Target V8 Version
+        id: version
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./V8_VERSION
+      
+      - name: Install Depot Tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+      - name: Checkout V8 Source Code
+        run: |
+          fetch v8
+          cd v8
+          git checkout ${{ steps.version.outputs.content }}
+          gclient sync
+      
+      - name: Prepare Artifact Directory (Headers)
+        shell: pwsh
+        run: |
+          New-Item -ItemType directory -Path ./artifact/
+          Copy-Item -Path ./v8/include -Recurse -Filter *.h -Destination ./artifact/ -Container
+      
+      - name: Prepare Release Header Files
+        shell: pwsh
+        run: Compress-Archive -Path artifact/include -DestinationPath artifact/header_files.zip
+
+      - name: Publish Compiled Libraries
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: V8 ${{ steps.version.outputs.content }}
+          tag_name: v${{ steps.version.outputs.content }}
+          files: artifact/header_files.zip 
+
+  build:
+    name: ${{ matrix.config.name }}_${{ matrix.config.architecture }}
+    if: "!startsWith(github.event.head_commit.message, '[Skip]')"
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+          - os: windows-latest
+            name: windows
+            architecture: x64
+            library_name: v8_monolith.lib
+
+          - os: ubuntu-latest
+            name: linux
+            architecture: x64
+            library_name: libv8_monolith.a
+          
+          # - os: macOS-latest
+          #   name: macos
+          #   architecture: x64
+          #   library_name: libv8_monolith.a
+            
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v1
+      
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 2.7.17
+
+      - name: Install MSVC/MSBuild (Windows)
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Get Target V8 Version
+        id: version
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./V8_VERSION
+
+      - name: Install Depot Tools (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Invoke-WebRequest -Uri "https://storage.googleapis.com/chrome-infra/depot_tools.zip" -OutFile depot_tools.zip
+          Expand-Archive -Path depot_tools.zip -DestinationPath depot_tools
+          Remove-Item depot_tools.zip
+          echo "$pwd\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      
+      - name: Install Depot Tools (Linux & MacOS)
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+      - name: Checkout V8 Source Code
+        run: |
+          fetch v8
+          cd v8
+          git checkout ${{ steps.version.outputs.content }}
+          gclient sync
+
+      - name: Build V8
+        shell: pwsh
+        run: |
+          Set-Location -Path v8
+          python tools/dev/v8gen.py x64.release
+          Copy-Item "../platforms/${{ matrix.config.name }}_${{ matrix.config.architecture }}/args.gn" -Destination "./out.gn/x64.release/args.gn" -force
+          gn gen out.gn/x64.release
+          Get-Content ./out.gn/x64.release/args.gn | Write-Output
+          ninja -C out.gn/x64.release
+      
+      - name: Prepare Artifact Directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType directory -Path ./artifact/
+          Copy-Item -Path ./v8/include -Recurse -Filter *.h -Destination ./artifact/ -Container
+          Copy-Item -Path ./v8/out.gn/x64.release/obj/${{ matrix.config.library_name }} -Destination ./artifact/${{ matrix.config.name }}_${{ matrix.config.architecture }}_${{ matrix.config.library_name }}
+      
+      - name: Upload Headers & Monolithic Lib
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.config.name }}_${{ matrix.config.architecture }}_v8_monolith
+          path: artifact/
+
+      - name: Publish Compiled Libraries
+        if: >-
+          startsWith(github.event.head_commit.message, '[Release]') &&
+          github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: V8 ${{ steps.version.outputs.content }}
+          tag_name: v${{ steps.version.outputs.content }}
+          files: artifact/${{ matrix.config.name }}_${{ matrix.config.architecture }}_${{ matrix.config.library_name }}
