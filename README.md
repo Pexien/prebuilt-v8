@@ -1,5 +1,5 @@
 # Prebuilt V8 Binaries 💼
-
+[![Build V8 Static Library](https://github.com/newkjs/prebuilt-v8/actions/workflows/build_v8.yml/badge.svg)](https://github.com/newkjs/prebuilt-v8/actions/workflows/build_v8.yml)<br>
 V8 is an open source JavaScript and WebAssembly engine created by Google which is used globally in Google Chrome, Node.Js, Deno, and many other technologies. The V8 engine can be embedded into any C++ project by linking the required libraries and importing the necessary header files. As a result of V8's huge feature set and complete implementation of the ECMAScript standard, it has a notoriously large code base. Building V8 from source can be cumbersome and time consuming, so to aid in project which must embed the engine we've created this repository which will automatically compile and release (or produce artifacts) of monolithic static V8 libaries.
 
 **✔️ Supported platforms:** Windows x86 64-bit, and Linux x86 64-bit
