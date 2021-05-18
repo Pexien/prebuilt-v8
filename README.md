@@ -23,7 +23,7 @@ The workflow responsible for building the V8 libraries recognises a couple prefi
 | Prefix | Behavior |
 | ------ | -------- |
 | [Skip] | The workflow will **not** run if this prefix is present. |
-| [Release] | The workflow wil release the compiled binaries and acquired header files. |
+| [Release] | The workflow will release the compiled binaries and acquired header files. |
 
 **ℹ️ Notes:**
 - Only use the `[Skip]` prefix when updating documentation or non-build-impacting files. Any changes to build configurations or V8 versions must be rebuilt to assure the master branch is always working.
